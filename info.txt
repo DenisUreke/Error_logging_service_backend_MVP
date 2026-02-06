@@ -1,0 +1,16 @@
+/START
+
+py -m uvicorn error_service.main:app --reload
+
+
+/reload
+py -m uvicorn app.main:app --reload
+
+-------
+
+CALL
+
+Invoke-RestMethod -Method Post http://127.0.0.1:8000/errors `
+  -ContentType "application/json" `
+  -Body '{"machine":"UVS3","message":"IMAWeb timeout","severity":"CRITICAL"}'
+
