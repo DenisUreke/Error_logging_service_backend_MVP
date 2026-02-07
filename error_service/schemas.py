@@ -46,6 +46,14 @@ class ServiceOut(BaseModel):
     created_at: datetime
     name: str
     group: str
+    
+    
+class RuleUserCreateIn(BaseModel):
+    first_name: str = Field(..., min_length=1, max_length=100)
+    last_name: str = Field(..., min_length=1, max_length=100)
+    role: str = Field(..., min_length=1, max_length=50)
+    email: str = Field(..., min_length=3, max_length=255)
+    phone_number: Optional[str] = Field(None, max_length=30)
 
 class RuleIn(BaseModel):
     # Either provide user_id OR user
@@ -88,14 +96,6 @@ class RuleUserOut(BaseModel):
     do_email: bool
     do_call: bool
     do_halo_ticket: bool
-
-    
-class RuleUserCreateIn(BaseModel):
-    first_name: str = Field(..., min_length=1, max_length=100)
-    last_name: str = Field(..., min_length=1, max_length=100)
-    role: str = Field(..., min_length=1, max_length=50)
-    email: str = Field(..., min_length=3, max_length=255)
-    phone_number: Optional[str] = Field(None, max_length=30)
 
 
 
