@@ -14,3 +14,19 @@ Invoke-RestMethod -Method Post http://127.0.0.1:8000/errors `
   -ContentType "application/json" `
   -Body '{"machine":"UVS3","message":"IMAWeb timeout","severity":"CRITICAL"}'
 
+  Invoke-RestMethod -Method Post http://127.0.0.1:8000/errors `
+  -ContentType "application/json" `
+  -Body '{"machine":"UVS2","message":"CEFLA shutdown","severity":"CRITICAL"}'
+
+    Invoke-RestMethod -Method Post http://127.0.0.1:8000/errors `
+  -ContentType "application/json" `
+  -Body '{"machine":"UVS1","message":"CEFLA recirculation error","severity":"CRITICAL"}'
+
+
+  Invoke-RestMethod http://127.0.0.1:8000/errors
+
+  Invoke-RestMethod http://127.0.0.1:8000/report/health.pdf
+
+  Invoke-RestMethod http://127.0.0.1:8000/users
+
+
