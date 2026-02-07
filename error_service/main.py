@@ -14,6 +14,15 @@ from reportlab.lib.pagesizes import A4
 from datetime import datetime
 from fastapi.middleware.cors import CORSMiddleware
 
+from io import BytesIO
+from datetime import datetime
+
+# ReportLab graphics (charts)
+from reportlab.graphics.shapes import Drawing, String
+from reportlab.graphics.charts.piecharts import Pie
+from reportlab.graphics.charts.barcharts import VerticalBarChart
+from reportlab.graphics import renderPDF
+
 
 Base.metadata.create_all(bind=engine)
 
@@ -455,6 +464,81 @@ def health_report_pdf(db: Session = Depends(get_db)):
     c.drawString(50, y, f"Generated: {datetime.now().isoformat(timespec='seconds')}")
     y -= 30
 
+    # =========================
+    # 1) PIE CHART (mock data)
+    # =========================
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(50, y, "Severity distribution")
+    y -= 10
+
+    # Mock data (swap for real aggregation later)
+    severity_labels = ["Info", "Warning", "Error", "Critical"]
+    severity_values = [12, 7, 5, 2]
+
+    pie = Pie()
+    pie.x = 0
+    pie.y = 0
+    pie.width = 220
+    pie.height = 220
+    pie.data = severity_values
+    pie.labels = severity_labels
+    pie.sideLabels = 1
+    pie.slices.strokeWidth = 0.5
+
+    pie_drawing = Drawing(320, 240)
+    pie_drawing.add(pie)
+    pie_drawing.add(String(0, 225, "Example chart", fontSize=8))
+
+    # Render drawing onto the PDF canvas (x, y are bottom-left of the drawing)
+    pie_x = 50
+    pie_y = y - 240  # reserve 240pt of height
+    renderPDF.draw(pie_drawing, c, pie_x, pie_y)
+    y = pie_y - 20
+
+    # =========================
+    # 2) BAR CHART (mock data)
+    # =========================
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(50, y, "Errors per machine")
+    y -= 10
+
+    machines = ["IMA-01", "CEFLA-02", "AGV-07", "BOX-01", "PALL-03"]
+    machine_counts = [4, 2, 6, 1, 3]
+
+    bar = VerticalBarChart()
+    bar.x = 40
+    bar.y = 30
+    bar.height = 180
+    bar.width = 380
+    bar.data = [machine_counts]  # list-of-series
+    bar.categoryAxis.categoryNames = machines
+    bar.valueAxis.valueMin = 0
+    bar.valueAxis.valueMax = max(machine_counts) + 2
+    bar.valueAxis.valueStep = 1
+    bar.barWidth = 18
+    bar.groupSpacing = 10
+
+    bar_drawing = Drawing(480, 240)
+    bar_drawing.add(bar)
+
+    bar_x = 50
+    bar_y = y - 240
+    # If you’re near bottom, new page
+    if bar_y < 50:
+        c.showPage()
+        y = height - 50
+        bar_y = y - 240
+
+    renderPDF.draw(bar_drawing, c, bar_x, bar_y)
+    y = bar_y - 30
+
+    # =========================
+    # 3) TABLE-ish LIST (your existing section)
+    # =========================
+    if y < 120:
+        c.showPage()
+        y = height - 50
+
     c.setFont("Helvetica-Bold", 12)
     c.drawString(50, y, "Latest errors")
     y -= 20
@@ -478,6 +562,12 @@ def health_report_pdf(db: Session = Depends(get_db)):
         media_type="application/pdf",
         headers={"Content-Disposition": "attachment; filename=system_health_report.pdf"},
     )
+
+@app.delete("/errors", status_code=204)
+def delete_all_errors(db: Session = Depends(get_db)):
+    db.query(ErrorRecord).delete()
+    db.commit()
+    return
 
 
 
