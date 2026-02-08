@@ -6,3 +6,4 @@ email-validator
 reportlab
 python-multipart
 requests
+openpyxl

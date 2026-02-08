@@ -23,6 +23,15 @@ from reportlab.graphics.charts.piecharts import Pie
 from reportlab.graphics.charts.barcharts import VerticalBarChart
 from reportlab.graphics import renderPDF
 
+from io import BytesIO
+from datetime import datetime
+
+from openpyxl import Workbook
+from openpyxl.utils import get_column_letter
+from openpyxl.styles import Font, Alignment
+from openpyxl.chart import PieChart, BarChart, Reference
+from openpyxl.chart.label import DataLabelList
+
 
 Base.metadata.create_all(bind=engine)
 
@@ -568,6 +577,153 @@ def delete_all_errors(db: Session = Depends(get_db)):
     db.query(ErrorRecord).delete()
     db.commit()
     return
+
+
+@app.get("/report/health.xlsx")
+def health_report_excel(db: Session = Depends(get_db)):
+    # Latest 10 errors (real data)
+    rows = (
+        db.query(ErrorRecord)
+        .order_by(ErrorRecord.id.desc())
+        .limit(10)
+        .all()
+    )
+
+    wb = Workbook()
+
+    # =========================
+    # Sheet 1: LatestErrors
+    # =========================
+    ws = wb.active
+    ws.title = "LatestErrors"
+
+    ws["A1"] = "System Health Report (Excel)"
+    ws["A1"].font = Font(bold=True, size=14)
+    ws["A2"] = f"Generated: {datetime.now().isoformat(timespec='seconds')}"
+    ws["A2"].font = Font(size=10)
+
+    headers = ["ID", "CreatedAt", "Machine", "Severity", "Message"]
+    ws.append([])
+    ws.append(headers)
+
+    header_row = ws.max_row
+    for col_idx in range(1, len(headers) + 1):
+        cell = ws.cell(row=header_row, column=col_idx)
+        cell.font = Font(bold=True)
+        cell.alignment = Alignment(vertical="center")
+
+    for r in rows:
+        ws.append([r.id, r.created_at, r.machine, r.severity, r.message])
+
+    col_widths = {1: 8, 2: 22, 3: 18, 4: 12, 5: 60}
+    for col_idx, w in col_widths.items():
+        ws.column_dimensions[get_column_letter(col_idx)].width = w
+
+    ws.freeze_panes = f"A{header_row + 1}"
+
+    # =========================
+    # Sheet 2: SummaryData (tables only)
+    # =========================
+    ws_data = wb.create_sheet("SummaryData")
+    ws_data["A1"] = "Mock Summary Data (chart source)"
+    ws_data["A1"].font = Font(bold=True, size=12)
+
+    # Mock severity distribution
+    severity_labels = ["Info", "Warning", "Error", "Critical"]
+    severity_values = [12, 7, 5, 2]
+
+    ws_data["A3"] = "Severity distribution"
+    ws_data["A3"].font = Font(bold=True)
+
+    ws_data["A4"] = "Severity"
+    ws_data["B4"] = "Count"
+    ws_data["A4"].font = Font(bold=True)
+    ws_data["B4"].font = Font(bold=True)
+
+    for i, (lab, val) in enumerate(zip(severity_labels, severity_values), start=5):
+        ws_data[f"A{i}"] = lab
+        ws_data[f"B{i}"] = val
+
+    # Mock machine counts
+    machines = ["IMA-01", "CEFLA-02", "AGV-07", "BOX-01", "PALL-03"]
+    machine_counts = [4, 2, 6, 1, 3]
+
+    ws_data["D3"] = "Errors per machine"
+    ws_data["D3"].font = Font(bold=True)
+
+    ws_data["D4"] = "Machine"
+    ws_data["E4"] = "Count"
+    ws_data["D4"].font = Font(bold=True)
+    ws_data["E4"].font = Font(bold=True)
+
+    for i, (m, val) in enumerate(zip(machines, machine_counts), start=5):
+        ws_data[f"D{i}"] = m
+        ws_data[f"E{i}"] = val
+
+    ws_data.column_dimensions["A"].width = 18
+    ws_data.column_dimensions["B"].width = 10
+    ws_data.column_dimensions["D"].width = 18
+    ws_data.column_dimensions["E"].width = 10
+
+    # =========================
+    # Sheet 3: Charts (charts only)
+    # =========================
+    ws_charts = wb.create_sheet("Charts")
+
+    ws_charts["A1"] = "System Health Charts"
+    ws_charts["A1"].font = Font(bold=True, size=14)
+    ws_charts["A2"] = f"Generated: {datetime.now().isoformat(timespec='seconds')}"
+    ws_charts["A2"].font = Font(size=10)
+
+    # ---- Pie chart (Severity) ----
+    pie = PieChart()
+    pie.title = "Severity distribution"
+
+    # Data references from SummaryData
+    pie_data = Reference(ws_data, min_col=2, min_row=4, max_row=8)    # B4:B8 includes header
+    pie_labels = Reference(ws_data, min_col=1, min_row=5, max_row=8)  # A5:A8
+    pie.add_data(pie_data, titles_from_data=True)
+    pie.set_categories(pie_labels)
+
+    pie.dataLabels = DataLabelList()
+    pie.dataLabels.showPercent = True
+
+    # Place chart on Charts sheet
+    ws_charts.add_chart(pie, "A4")
+
+    # ---- Bar chart (Machine counts) ----
+    bar = BarChart()
+    bar.type = "col"
+    bar.title = "Errors per machine"
+    bar.y_axis.title = "Count"
+    bar.x_axis.title = "Machine"
+
+    bar_data = Reference(ws_data, min_col=5, min_row=4, max_row=9)   # E4:E9 includes header
+    bar_cats = Reference(ws_data, min_col=4, min_row=5, max_row=9)   # D5:D9
+    bar.add_data(bar_data, titles_from_data=True)
+    bar.set_categories(bar_cats)
+
+    bar.dataLabels = DataLabelList()
+    bar.dataLabels.showVal = True
+
+    ws_charts.add_chart(bar, "A20")
+
+    # Optional: hide the SummaryData sheet so users just see LatestErrors + Charts
+    ws_data.sheet_state = "hidden"
+
+    # =========================
+    # Return file
+    # =========================
+    buf = BytesIO()
+    wb.save(buf)
+    xlsx_bytes = buf.getvalue()
+    buf.close()
+
+    return Response(
+        content=xlsx_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=system_health_report.xlsx"},
+    )
 
 
 
